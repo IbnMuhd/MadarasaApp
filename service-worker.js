@@ -1,23 +1,31 @@
-// src/serviceWorker.js (Example using Workbox - recommended)
-// This is a simplified example. For production, consider using Workbox for easier management.
+// public/service-worker.js
 const CACHE_NAME = 'madrassa-app-v1';
+// You'll need to list all the files your app needs for offline access here.
+// This includes the HTML, main JS bundle, CSS, images, etc.
+// Example paths - adjust these based on your actual build output!
 const urlsToCache = [
   '/',
-  '/static/js/bundle.js', // Adjust paths based on your build output
-  '/static/css/main.css', // Adjust paths based on your build output
+  '/static/js/bundle.js', // This is typically the main JS file after build
+  '/static/js/0.chunk.js', // This might be needed depending on your build
+  '/static/js/main.chunk.js', // This might be needed depending on your build
+  '/static/css/main.css', // This is typically the main CSS file after build
   '/manifest.json',
   '/favicon.ico',
   '/logo192.png',
   '/logo512.png',
-  // Add other static assets you want cached initially
+  // Add other static assets as needed
 ];
 
 self.addEventListener('install', (event) => {
+  console.log('Service Worker: Installing....');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('Opened cache');
+        console.log('Service Worker: Caching app shell');
         return cache.addAll(urlsToCache);
+      })
+      .catch((error) => {
+         console.error('Service Worker: Error caching app shell', error);
       })
   );
 });
@@ -26,100 +34,56 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
-        // Cache hit - return response
+        // Return cached version if found
         if (response) {
+          console.log('Service Worker: Found in cache', event.request.url);
           return response;
         }
-        // IMPORTANT: Clone the request. A request is a stream and
-        // can only be consumed once. Since we are consuming this
-        // once by cache and once by the browser for fetch, we need
-        // to clone the response.
-        const fetchRequest = event.request.clone();
 
-        return fetch(fetchRequest).then(
-          (response) => {
-            // Check if we received a valid response
-            if(!response || response.status !== 200 || response.type !== 'basic') {
-              return response;
+        // Otherwise, fetch from network
+        console.log('Service Worker: Fetching from network', event.request.url);
+        return fetch(event.request).then(
+          (networkResponse) => {
+            // Optional: Clone and cache the new response for future requests
+            // Only cache successful responses
+            if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+              return networkResponse;
             }
 
-            // IMPORTANT: Clone the response. A response is a stream
-            // and because we want the browser to consume the response
-            // as well as the cache consuming the response, we need
-            // to clone it so we have two streams.
-            const responseToCache = response.clone();
+            const responseToCache = networkResponse.clone();
 
             caches.open(CACHE_NAME)
               .then((cache) => {
+                console.log('Service Worker: Caching new request', event.request.url);
                 cache.put(event.request, responseToCache);
               });
 
-            return response;
+            return networkResponse;
           }
-        );
+        ).catch((error) => {
+           console.error('Service Worker: Network request failed', event.request.url, error);
+           // If network fails and cache fails, return an error response or a fallback
+           // For a simple PWA, returning the cached index.html might be appropriate
+           // but for this specific case, handling might be more complex.
+           // Returning an error for now.
+           return new Response('Network Error', { status: 503 });
+        });
       })
   );
 });
 
-// src/serviceWorkerRegistration.js (To register the service worker)
-export function register(config) {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      const swUrl = `${process.env.PUBLIC_URL}/service-worker.js`; // Note: file must be named service-worker.js by default
-
-      navigator.serviceWorker
-        .register(swUrl)
-        .then((registration) => {
-          registration.onupdatefound = () => {
-            const installingWorker = registration.installing;
-            if (installingWorker == null) {
-              return;
-            }
-            installingWorker.onstatechange = () => {
-              if (installingWorker.state === 'installed') {
-                if (navigator.serviceWorker.controller) {
-                  // At this point, the updated precached content has been fetched,
-                  // but the previous service worker will still serve the older
-                  // content until all client tabs are closed.
-                  console.log(
-                    'New content is available and will be used when all ' +
-                      'tabs for this page are closed. See https://cra.link/PWA.'
-                  );
-
-                  // Execute callback
-                  if (config && config.onUpdate) {
-                    config.onUpdate(registration);
-                  }
-                } else {
-                  // At this point, everything has been precached.
-                  // It's the perfect time to display a
-                  // "Content is cached for offline use." message.
-                  console.log('Content is cached for offline use.');
-
-                  // Execute callback
-                  if (config && config.onSuccess) {
-                    config.onSuccess(registration);
-                  }
-                }
-              }
-            };
-          };
+self.addEventListener('activate', (event) => {
+  console.log('Service Worker: Activating....');
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('Service Worker: Deleting old cache', cacheName);
+            return caches.delete(cacheName);
+          }
         })
-        .catch((error) => {
-          console.error('Error during service worker registration:', error);
-        });
-    });
-  }
-}
-
-export function unregister() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready
-      .then((registration) => {
-        registration.unregister();
-      })
-      .catch((error) => {
-        console.error(error.message);
-      });
-  }
-}
+      );
+    })
+  );
+});
