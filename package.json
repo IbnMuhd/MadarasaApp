@@ -1,4 +1,13 @@
 {
+  "homepage": "https://IbnMuhd.github.io/MadarasaApp",
+  "scripts": {
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
+    // ... other scripts like "start", "build", etc.
+  }
+}
+
+{
   "devDependencies": {
     "gh-pages": "^6.3.0"
   },
@@ -23,4 +32,5 @@
       "last 1 safari version"
     ]
   }
+}
 }
